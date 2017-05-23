@@ -18,7 +18,9 @@ import (
 )
 
 const (
-	boshJobProcessNameLabel = model.MetaLabelPrefix + "bosh_job_process_name"
+	boshJobProcessNameLabel   = model.MetaLabelPrefix + "bosh_job_process_name"
+	boshJobInstanceNameLabel  = model.MetaLabelPrefix + "bosh_job_instance_name"
+	boshJobInstanceIndexLabel = model.MetaLabelPrefix + "bosh_job_instance_index"
 )
 
 type ProcessesDetails map[string][]ProcessDetails
@@ -38,6 +40,10 @@ type TargetGroups []TargetGroup
 type TargetGroup struct {
 	Targets []string       `json:"targets"`
 	Labels  model.LabelSet `json:"labels,omitempty"`
+}
+
+type TargetGroupKey struct {
+	ProcessName, JobName, JobIndex string
 }
 
 type ServiceDiscoveryCollector struct {
@@ -160,18 +166,23 @@ func (c *ServiceDiscoveryCollector) createTargetGroups(processesDetails Processe
 	targetGroups := TargetGroups{}
 
 	for name, details := range processesDetails {
-		targets := []string{}
+		labeledTargets := make(map[TargetGroupKey][]string)
 		for _, processDetails := range details {
-			targets = append(targets, processDetails.JobIP)
+			targetKey := TargetGroupKey{name, processDetails.JobName, processDetails.JobIndex}
+			labeledTargets[targetKey] = append(labeledTargets[targetKey], processDetails.JobIP)
 		}
 
-		targetGroup := TargetGroup{
-			Targets: targets,
-			Labels: model.LabelSet{
-				model.LabelName(boshJobProcessNameLabel): model.LabelValue(name),
-			},
+		for instance, targets := range labeledTargets {
+			targetGroup := TargetGroup{
+				Targets: targets,
+				Labels: model.LabelSet{
+					model.LabelName(boshJobProcessNameLabel):   model.LabelValue(instance.ProcessName),
+					model.LabelName(boshJobInstanceNameLabel):  model.LabelValue(instance.JobName),
+					model.LabelName(boshJobInstanceIndexLabel): model.LabelValue(instance.JobIndex),
+				},
+			}
+			targetGroups = append(targetGroups, targetGroup)
 		}
-		targetGroups = append(targetGroups, targetGroup)
 	}
 
 	return targetGroups
